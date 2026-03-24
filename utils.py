@@ -109,7 +109,7 @@ def get_amplitudes_table(interesting_table):
     amplitudes_table = pd.DataFrame()
 
     # словарь для записи максимума и минимума амплитуд в него
-    amplitudes = {'Pэкран': {'max' : [], 'min' : []}, '(Pk-Pa)': {'max' : [], 'min' : []}}
+    amplitudes = {'Pэкран': {'max' : [], 'min' : []}, '(Pk-Pa)': {'max' : [], 'min' : []}, '(Po-Pa)': {'max' : [], 'min' : []}}
     # считаем максимумы и минимумы амплитуд за каждый период(кроме последнего так как он незавершён) для Pэкран и Pk-Pa 
     for period in interesting_table['period'].unique()[:-1]:
         for p_name in amplitudes.keys():
@@ -122,6 +122,9 @@ def get_amplitudes_table(interesting_table):
     
     amplitudes_table['pk_max'] = amplitudes['(Pk-Pa)']['max']
     amplitudes_table['pk_min'] = amplitudes['(Pk-Pa)']['min']
+
+    amplitudes_table['po_max'] = amplitudes['(Po-Pa)']['max']
+    amplitudes_table['po_min'] = amplitudes['(Po-Pa)']['min']
 
     return amplitudes_table
 
@@ -139,20 +142,24 @@ def get_sums_table(amplitudes_table):
     sums_table['pэ_min'] = [amplitudes_table['pэ_min'].sum()]
     sums_table['pk_max'] = [amplitudes_table['pk_max'].sum()]
     sums_table['pk_min'] = [amplitudes_table['pk_min'].sum()]
+    sums_table['po_max'] = [amplitudes_table['po_max'].sum()]
+    sums_table['po_min'] = [amplitudes_table['po_min'].sum()]
 
     return sums_table
 
-def get_answer_table(sums_table, amplitudes_table, interesting_table, mean_parameters):
+def get_answer_table(sums_table, amplitudes_table, mean_parameters, info):
     '''
     получает на вход все посчитанные до этого таблицы
     используя их по формулам считает необходимые значения и возвращает их
-    got: sums_table, amplitudes_table, interesting_table, mean_parameters
+    got: sums_table, amplitudes_table,  mean_parameters
     return: table with sought-after vals
     '''
     answer_table = pd.DataFrame()
+    # Вытаскиваем размер отверстия из формы в мм и переводим в метры
+    k = float(info["hole_diameter"][1].split()[0]) / 1000
 
     # формулы взяты из примера excel
-    answer_table['Qlэфф(л/с)'] = 0.638 * np.sqrt(mean_parameters['Po(кг/см**2)'] - mean_parameters['Pk(кг/см**2)'])
+    answer_table['Qlэфф(л/с)'] = k * np.sqrt(mean_parameters['Po(кг/см**2)'] - mean_parameters['Pk(кг/см**2)'])
     answer_table['Cqэфф'] = 1000 * mean_parameters['Qg(м**3/с)'] / answer_table['Qlэфф(л/с)']
     answer_table['Am'] = (sums_table['pэ_max'] - sums_table['pэ_min']) / len(amplitudes_table)
     answer_table['Am/Po'] = answer_table['Am'] / mean_parameters['Po(кг/см**2)']
@@ -162,7 +169,7 @@ def get_answer_table(sums_table, amplitudes_table, interesting_table, mean_param
     
     return answer_table
 
-def get_voo_table(mean_parameters):
+def get_voo_table(mean_parameters, info):
     '''подсчитывает значения по формулам, на основе средних значений. Значения необходимы для итогового файла
     обозначения и формуы A2... взяты из примера excel сделанного руками научного сотрудника 
     '''
@@ -174,14 +181,17 @@ def get_voo_table(mean_parameters):
     M2 = np.sqrt(2 * A2 * 100)
     J2 = mean_parameters['Hk(гц)']
 
+    # Вытаскиваем размер диска из формы в мм и переводим в метры
+    disk_distance = float(info['disk_distance'][1].split()[0]) / 1000
+
     voo_table = pd.DataFrame()
     voo_table['Voo(м/с)'] = M2
     voo_table['Cq'] = 1000 * D2/C2
     voo_table['Cd'] = B2/A2
-    voo_table['Kp'] = C2/(1000 * M2 * 0.025 * 0.009)
+    voo_table['Kp'] = C2/(1000 * M2 * disk_distance * 0.009)
     voo_table['T(s)'] = 1/J2
-    voo_table['Std'] = J2*0.025/M2
-    voo_table['Stdo'] = K2*0.025/M2
+    voo_table['Std'] = J2 * disk_distance / M2
+    voo_table['Stdo'] = K2 * disk_distance / M2
     
     return voo_table
 
@@ -247,7 +257,7 @@ def create_excel_by_txt(file, info, compound_wb):
     mean_parameters.to_excel(writer, sheet_name='Sheet1', index=False)
 
     period = get_period(mean_parameters)
-    voo_table = get_voo_table(mean_parameters)
+    voo_table = get_voo_table(mean_parameters, info)
 
     interesting_table = get_interesting_table(table)
     interesting_table = add_period(interesting_table, period)
@@ -255,14 +265,12 @@ def create_excel_by_txt(file, info, compound_wb):
     amplitudes_table = get_amplitudes_table(interesting_table)
     sums_table = get_sums_table(amplitudes_table)
     
-    answer_table = get_answer_table(sums_table, amplitudes_table, interesting_table, mean_parameters)
+    answer_table = get_answer_table(sums_table, amplitudes_table, mean_parameters, info)
 
-    interesting_table.to_excel(writer, sheet_name='Sheet1', startcol=32, startrow=5, index=False)
+    interesting_table.to_excel(writer, sheet_name='Sheet1', startcol=35, startrow=5, index=False)
     amplitudes_table.to_excel(writer, sheet_name='Sheet1', startrow=5, startcol=26, index=False)
     voo_table.to_excel(writer, sheet_name='Sheet1', startcol=12, index=False)
     answer_table.to_excel(writer, sheet_name='Sheet1', startcol=23, index=False)
-
-    
 
     workbook = writer.book
     worksheet = writer.sheets['Sheet1']
@@ -274,7 +282,7 @@ def create_excel_by_txt(file, info, compound_wb):
     chart1.x_axis.title = 'Измерение'
     chart1.y_axis.title = 'P(kg/cm^2)'
 
-    data = Reference(worksheet, min_col=34, max_col=37, min_row=6, max_row=len(interesting_table))
+    data = Reference(worksheet, min_col=37, max_col=40, min_row=6, max_row=len(interesting_table))
     chart1.add_data(data, titles_from_data=True)
     
     # форматирование
@@ -286,7 +294,7 @@ def create_excel_by_txt(file, info, compound_wb):
         style.graphicalProperties.line.width = width # width in EMUs
         style.smooth = True
 
-    dates = Reference(worksheet, min_col=33, min_row=6, max_row=len(interesting_table))
+    dates = Reference(worksheet, min_col=36, min_row=6, max_row=len(interesting_table))
     chart1.set_categories(dates)
     
     chartsheet.add_chart(chart1)
