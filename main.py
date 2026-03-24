@@ -1,4 +1,5 @@
 import streamlit as st
+from stqdm import stqdm
 import requests
 import json
 import openpyxl
@@ -66,7 +67,7 @@ date = None
 # создаём архив
 with ZipFile('data.zip', 'w', ZIP_DEFLATED) as zip:
     excel_filenames = []
-    for uploaded_file in uploaded_files:
+    for uploaded_file in stqdm(uploaded_files):
         # Записываем файлы в облаке, чтобы можно было  к ним обращаться
         with open(uploaded_file.name, 'wb') as f:
             f.write(uploaded_file.read())
