@@ -74,13 +74,13 @@ with ZipFile('data.zip', 'w', ZIP_DEFLATED) as zip:
 
         # Создаём excel file и дополняем итоговый воркбук значениями из него
         excel_filename = create_excel(uploaded_file.name, form_info, compound_wb)
-        # записываем в архив
+        
+        # записываем в архив и запоминаем название
         zip.write(excel_filename)
-        # добавляем название в список названий
         excel_filenames.append(excel_filename)
-        # получаем дату эксперимента
+
+        # архив называем по дате эксперимента
         date = get_date_from_filename(uploaded_file.name)
-        # архив называем по дате
         archive_name = f"{date}.zip"
 
     # сохраняем итоговый воркбук в файл только если список excel не пустой
